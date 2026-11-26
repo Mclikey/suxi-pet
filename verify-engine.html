@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>engine-harness</title>
+<style>body{background:#202020;color:#fff;font:13px monospace;margin:0;padding:8px}
+#err{color:#ff6666;white-space:pre-wrap;font-size:12px}
+#c{background:transparent}</style>
+</head>
+<body>
+<div id="status">booting...</div>
+<pre id="err"></pre>
+<canvas id="c" width="420" height="440"></canvas>
+<script type="module">
+const errBox = document.getElementById('err');
+const status = document.getElementById('status');
+window.onerror = (msg, src, line, col, e) => {
+  errBox.textContent += `[window.onerror] ${msg}\n  at ${src}:${line}:${col}\n  ${e && e.stack ? e.stack : ''}\n`;
+  document.title = 'ERROR';
+  return false;
+};
+window.addEventListener('unhandledrejection', (ev) => {
+  errBox.textContent += `[unhandledrejection] ${ev.reason && ev.reason.stack ? ev.reason.stack : ev.reason}\n`;
+  document.title = 'REJECT';
+});
+try {
+  const { KuroCatEngine } = await import('/src/catEngine.ts');
+  status.textContent = 'import ok';
+  const canvas = document.getElementById('c');
+  const engine = new KuroCatEngine(canvas);
+  status.textContent = 'engine ok';
+  engine.setCatAppearance('suxi', null);
+  status.textContent = 'setCatAppearance(suxi) ok';
+  engine.resize();
+  engine.start();
+  status.textContent = 'resize+start ok';
+  let n = 0;
+  const iv = setInterval(() => {
+    n++;
+    if (n === 30) {
+      clearInterval(iv);
+      const c2 = canvas.getContext('2d');
+      const d = c2.getImageData(0, 0, canvas.width, canvas.height).data;
+      let opaque = 0;
+      for (let i = 3; i < d.length; i += 4) if (d[i] > 20) opaque++;
+      status.textContent = `SURVIVED. opaque px: ${opaque} / ${d.length/4}`;
+      document.title = opaque > 1000 ? 'RENDER-OK' : 'RENDER-EMPTY';
+    }
+  }, 50);
+} catch (e) {
+  errBox.textContent += `[bootstrap] ${e && e.stack ? e.stack : e}\n`;
+  document.title = 'BOOT-ERROR';
+}
+</script>
+</body>
+</html>

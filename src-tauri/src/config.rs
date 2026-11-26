@@ -278,7 +278,7 @@ pub fn load_settings() -> AppSettings {
     let path = config_path();
     if let Ok(content) = fs::read_to_string(&path) {
         if let Ok(mut parsed) = serde_json::from_str::<AppSettings>(&content) {
-            parsed.scale = parsed.scale.clamp(0.20, 1.50);
+            parsed.scale = parsed.scale.clamp(0.20, 2.50);
             parsed.tail_key_mode = normalize_tail_key_mode(&parsed.tail_key_mode);
             parsed.tail_key_ids = normalize_tail_key_ids(&parsed.tail_key_ids);
             parsed.render_mode = normalize_render_mode(&parsed.render_mode);

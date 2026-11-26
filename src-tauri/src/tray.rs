@@ -199,6 +199,7 @@ fn build_tray_menu(
     let breed_tuxedo = MenuItem::with_id(app, "breed_tuxedo", t(lang, "breeds.tuxedo"), true, None::<&str>)?;
     let breed_siamese = MenuItem::with_id(app, "breed_siamese", t(lang, "breeds.siamese"), true, None::<&str>)?;
     let breed_dafeiyu = MenuItem::with_id(app, "breed_dafeiyu", t(lang, "breeds.dafeiyu"), true, None::<&str>)?;
+    let breed_suxi = MenuItem::with_id(app, "breed_suxi", t(lang, "breeds.suxi"), true, None::<&str>)?;
     let breed_menu = Submenu::with_items(
         app,
         t(lang, "tray.breed_menu"),
@@ -211,6 +212,7 @@ fn build_tray_menu(
             &breed_tuxedo,
             &breed_siamese,
             &breed_dafeiyu,
+            &breed_suxi,
         ],
     )?;
 
@@ -771,6 +773,7 @@ pub fn setup_tray(app: &AppHandle, initial: &AppSettings) -> tauri::Result<()> {
                 "breed_tuxedo" => apply_breed_and_save(app, "tuxedo"),
                 "breed_siamese" => apply_breed_and_save(app, "siamese"),
                 "breed_dafeiyu" => apply_breed_and_save(app, "dafeiyu"),
+                "breed_suxi" => apply_breed_and_save(app, "suxi"),
                 "scale_25" => apply_scale_and_save(app, 0.25),
                 "scale_50" => apply_scale_and_save(app, 0.5),
                 "scale_75" => apply_scale_and_save(app, 0.75),

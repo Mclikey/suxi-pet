@@ -953,7 +953,7 @@ fn execute_tool(
                 }
             }
             if let Some(scale) = args.get("scale").and_then(|v| v.as_f64()) {
-                s.scale = scale.clamp(0.20, 1.50);
+                s.scale = scale.clamp(0.20, 2.50);
             }
             if let Some(rm) = args.get("renderMode").and_then(|v| v.as_str()) {
                 s.render_mode = crate::config::normalize_render_mode(rm);

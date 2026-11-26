@@ -161,15 +161,61 @@ function closeMenu(): void {
 }
 
 function updateScaleSliderVisual(scaleVal: number): void {
-  const pctNum = Math.round(Math.max(20, Math.min(150, scaleVal * 100)));
+  const pctNum = Math.round(Math.max(20, Math.min(250, scaleVal * 100)));
   if (scaleSliderEl) {
     scaleSliderEl.value = String(pctNum);
-    const fillPct = ((pctNum - 20) / (150 - 20)) * 100;
+    const fillPct = ((pctNum - 20) / (250 - 20)) * 100;
     scaleSliderEl.style.setProperty('--pct', `${fillPct.toFixed(1)}%`);
   }
   if (scaleValueEl) {
     scaleValueEl.textContent = `${pctNum}%`;
   }
+}
+
+/** Click the % badge → inline numeric input for an exact custom size (20%-250%). Enter commits, Esc cancels. */
+function beginCustomScaleEdit(): void {
+  if (!scaleValueEl) return;
+  const header = scaleValueEl.parentElement;
+  if (!header || header.querySelector('.scale-custom-input')) return;
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.className = 'scale-custom-input';
+  input.min = '20';
+  input.max = '250';
+  input.step = '1';
+  input.value = String(Math.round(settings.scale * 100));
+  input.style.width = '64px';
+  input.style.fontSize = '12px';
+  input.style.padding = '2px 4px';
+  input.style.borderRadius = '6px';
+  input.style.border = '1px solid rgba(120, 120, 120, 0.55)';
+  input.style.background = 'rgba(255, 255, 255, 0.92)';
+  input.style.color = '#222';
+  input.style.textAlign = 'center';
+  scaleValueEl.style.display = 'none';
+  header.appendChild(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = (commit: boolean) => {
+    if (done) return;
+    done = true;
+    const raw = Number(input.value);
+    input.remove();
+    scaleValueEl.style.display = '';
+    if (commit && Number.isFinite(raw)) {
+      const pct = Math.round(Math.max(20, Math.min(250, raw)));
+      void applySettingsPatch({ scale: pct / 100 });
+    }
+  };
+  input.addEventListener('keydown', (ev) => {
+    ev.stopPropagation();
+    if (ev.key === 'Enter') finish(true);
+    else if (ev.key === 'Escape') finish(false);
+  });
+  input.addEventListener('blur', () => finish(true));
+  input.addEventListener('click', (ev) => ev.stopPropagation());
+  input.addEventListener('dblclick', (ev) => ev.stopPropagation());
 }
 
 function renderBreedPills(): void {
@@ -284,11 +330,11 @@ function syncUI(): void {
   });
   const renderModeRowEl = document.getElementById('render-mode-row');
   if (renderModeRowEl) {
-    renderModeRowEl.classList.toggle('hidden', settings.catBreed === 'dafeiyu');
+    renderModeRowEl.classList.toggle('hidden', (settings.catBreed === 'dafeiyu' || settings.catBreed === 'suxi'));
   }
   const collarRowEl = document.getElementById('collar-row');
   if (collarRowEl) {
-    collarRowEl.classList.toggle('hidden', renderMode === '2d' || settings.catBreed === 'dafeiyu');
+    collarRowEl.classList.toggle('hidden', renderMode === '2d' || (settings.catBreed === 'dafeiyu' || settings.catBreed === 'suxi'));
   }
 
   const headphoneMode =
@@ -300,7 +346,7 @@ function syncUI(): void {
   });
   const headphoneRowEl = document.getElementById('headphone-row');
   if (headphoneRowEl) {
-    headphoneRowEl.classList.toggle('hidden', settings.catBreed === 'dafeiyu');
+    headphoneRowEl.classList.toggle('hidden', (settings.catBreed === 'dafeiyu' || settings.catBreed === 'suxi'));
   }
 
   const headerEl = document.getElementById('menu-header');
@@ -695,13 +741,13 @@ async function bootstrap(): Promise<void> {
     });
     scaleSliderEl.addEventListener('input', () => {
       sliderDragging = true;
-      const nextScale = Math.max(0.2, Math.min(1.5, Number(scaleSliderEl.value) / 100));
+      const nextScale = Math.max(0.2, Math.min(2.5, Number(scaleSliderEl.value) / 100));
       updateScaleSliderVisual(nextScale);
       void invoke('preview_scale', { scale: nextScale }).catch(() => {});
     });
     const commitSliderScale = () => {
       sliderDragging = false;
-      const nextScale = Math.max(0.2, Math.min(1.5, Number(scaleSliderEl.value) / 100));
+      const nextScale = Math.max(0.2, Math.min(2.5, Number(scaleSliderEl.value) / 100));
       void applySettingsPatch({ scale: nextScale });
     };
     scaleSliderEl.addEventListener('change', commitSliderScale);
@@ -711,11 +757,17 @@ async function bootstrap(): Promise<void> {
   }
 
   if (scaleValueEl) {
-    scaleValueEl.addEventListener('click', (e) => {
+    // Click → inline custom size input (any % between 20 and 250); double-click → reset 100%.
+    scaleValueEl.addEventListener('dblclick', (e) => {
       e.stopPropagation();
       sliderDragging = false;
       updateScaleSliderVisual(1.0);
       void applySettingsPatch({ scale: 1.0 });
+    });
+    scaleValueEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      sliderDragging = false;
+      beginCustomScaleEdit();
     });
   }
 

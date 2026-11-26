@@ -303,4 +303,14 @@ export const DEFAULT_BUILTIN_CATS: CatSkinConfig[] = [
     accentColor: '#5cc8ff',
     accentSideColor: '#2563eb',
   },
+  {
+    id: 'suxi',
+    name: '苏汐',
+    emoji: '🐰',
+    builtin: true,
+    furColor: '#2957a4',
+    eyeColorTop: '#2563eb',
+    accentColor: '#e0b73c',
+    accentSideColor: '#b8930f',
+  },
 ];

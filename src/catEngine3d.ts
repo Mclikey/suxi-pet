@@ -1985,7 +1985,7 @@ export class KuroCatEngine3D {
   }
 
   public setRenderScale(scale: number): void {
-    this.renderScale = clamp(scale, 0.2, 2.0);
+    this.renderScale = clamp(scale, 0.2, 2.5);
   }
 
   public onPrivacyTyping(): void {

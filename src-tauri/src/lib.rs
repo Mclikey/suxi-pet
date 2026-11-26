@@ -53,7 +53,7 @@ pub fn base_dimensions(layout: &str) -> (f64, f64) {
 
 pub fn window_dimensions(layout: &str, scale: f64) -> (f64, f64) {
     let (bw, bh) = base_dimensions(layout);
-    let s = scale.clamp(0.20, 1.50);
+    let s = scale.clamp(0.20, 2.50);
     #[cfg(windows)]
     let (min_w, min_h) = if win_needs_win7_ulw() {
         (WIN7_MIN_WINDOW_WIDTH, WIN7_MIN_WINDOW_HEIGHT)
@@ -529,7 +529,7 @@ fn get_agent_hooks_config(state: State<'_, AppState>) -> String {
 
 #[tauri::command]
 fn update_settings(app: AppHandle, state: State<'_, AppState>, mut patch: AppSettings) -> AppSettings {
-    patch.scale = patch.scale.clamp(0.20, 1.50);
+    patch.scale = patch.scale.clamp(0.20, 2.50);
     let clean_breed = sanitize_cat_id(&patch.cat_breed);
     patch.cat_breed = if cat_exists(&clean_breed) {
         clean_breed
@@ -887,7 +887,7 @@ fn open_tail_picker_from_menu(app: AppHandle) {
 
 #[tauri::command]
 fn preview_scale(app: AppHandle, scale: f64) {
-    let clamped = scale.clamp(0.20, 1.50);
+    let clamped = scale.clamp(0.20, 2.50);
     let _ = app.emit("kuro-scale-preview", clamped);
 }
 
@@ -1279,7 +1279,7 @@ fn start_storage_watcher(app: AppHandle) {
 }
 
 pub fn apply_scale_and_save(app: &AppHandle, scale: f64) {
-    let clamped = scale.clamp(0.20, 1.50);
+    let clamped = scale.clamp(0.20, 2.50);
     let state = app.state::<AppState>();
     let layout = { state.settings.lock().unwrap().keyboard_layout.clone() };
     let new_pos = app
@@ -1983,7 +1983,7 @@ fn start_hit_test_loop(
                     s.click_through_locked,
                     s.always_on_top,
                     s.keyboard_layout == "108",
-                    s.scale.clamp(0.20, 1.50),
+                    s.scale.clamp(0.20, 2.50),
                 )
             };
             let layout_str = if is_108 { "108" } else { "65" };
