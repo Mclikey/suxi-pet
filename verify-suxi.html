@@ -37,6 +37,7 @@ const layout = kb108 ? {
 let now = performance.now();
 // ?typing 模拟打字：左右手交替按键盘
 const typing = location.search.includes('typing');
+const edgeSim = location.search.includes('edge');
 const mouseSim = location.search.includes('mouse');
 let lastType = 0;
 function frame() {
@@ -46,10 +47,12 @@ function frame() {
   if (kb108) { ctx.fillStyle='#333'; ctx.fillRect(91,308,398,96); }
   else { ctx.fillStyle='#333'; ctx.fillRect(81,316,266,74); }
   if (mouseSim) { layout.mouseActiveAt = now - 100; layout.cursor = {x: layout.mouseBtnX, y: layout.mouseBtnY}; }
-  if (typing && now - lastType > 200) {
+  if ((typing || edgeSim) && now - lastType > 200) {
     lastType = now;
     const left = Math.floor(now / 200) % 2 === 0;
-    r.onKeyDown(left ? 65 : 76, left ? {x:170,y:348} : {x:250,y:348}, layout, false, false);
+    // edge 模式：按键盘最左下角与最右侧的键，检验手落点是否贴合按键
+    const pt = edgeSim ? (left ? {x:100,y:373} : {x:330,y:342}) : (left ? {x:170,y:348} : {x:250,y:348});
+    r.onKeyDown(left ? 65 : 76, pt, layout, false, false);
     setTimeout(() => r.onKeyUp(left ? 65 : 76), 90);
   }
   r.update(0.016, now, layout);

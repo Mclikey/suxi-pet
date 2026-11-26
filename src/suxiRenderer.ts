@@ -225,7 +225,6 @@ export class SuxiRenderer {
     this.keyTimes.push(now);
     this.bodyBob = Math.min(1.1, this.bodyBob + 0.72);
 
-    const charX = layout.is108 ? 268 : 192;
     const normX = Math.max(-1, Math.min(1, (pt.x - layout.kbCenterX) / (layout.kbWidth * 0.46)));
     const mouseBusy = layout.mouseLeft || layout.mouseRight || now - layout.mouseActiveAt < 900;
     const isLeftSide = pt.x < layout.kbCenterX - 2;
@@ -247,12 +246,9 @@ export class SuxiRenderer {
       this.spawnParticles(pt.x, pt.y - 8, 3, true);
     } else if (mouseBusy) {
       // Simultaneous mouse + keyboard: left hand stays glued on mouse, right hand taps main keyboard!
-      const shiftBase = layout.is108 ? -88 : -38;
-      const curCharX = charX + shiftBase;
-      const comfortX = Math.max(curCharX - 10, Math.min(curCharX + 92, pt.x));
-      const comfortY = Math.min(layout.kbCenterY + 6, pt.y);
-      this.rightHand.tx = comfortX;
-      this.rightHand.ty = comfortY;
+      // Suxi: hands land exactly on the pressed key (no comfort compression).
+      this.rightHand.tx = pt.x;
+      this.rightHand.ty = pt.y;
       this.rightHand.lastAt = now;
       this.rightHand.squash = 1;
       this.rightHand.heldVks.add(vk);
@@ -260,11 +256,11 @@ export class SuxiRenderer {
       // Cozy two-handed typing with gentle micro-sway (±5.5°)
       this.bodyTiltTarget = normX * 0.095;
       this.bodyShiftTarget = normX * (layout.is108 ? 22 : 13);
-      const comfortX =
-        charX +
-        this.bodyShiftTarget +
-        Math.max(-76, Math.min(76, (pt.x - charX) * 0.78));
-      const comfortY = Math.min(layout.kbCenterY + 10, pt.y);
+      // Suxi: hand lands exactly on the pressed key — the whale's "comfort" formula
+      // (78% of the distance, clamped to ±76px horizontally, Y clamped above kbCenterY+10)
+      // visibly short-stops edge keys and lifts bottom-row keys.
+      const comfortX = pt.x;
+      const comfortY = pt.y;
       if (isLeftSide) {
         this.leftHand.tx = comfortX;
         this.leftHand.ty = comfortY;
