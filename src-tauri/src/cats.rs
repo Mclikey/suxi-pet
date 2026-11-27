@@ -592,7 +592,7 @@ pub fn builtin_cats() -> Vec<CatSkinConfig> {
             ear_scale: None,
             eye_squint: None,
             body_chubbiness: None,
-            spots: vec![],
+            ..Default::default()
         },
     ]
 }
