@@ -22,6 +22,20 @@ export interface DaFeiYuLayout {
   privacyMode: boolean;
   privacyTypingAt: number;
   is108: boolean;
+  peekAmount?: number;
+  /** Engine-driven idle vignette state (v5.1.3 port): present only while an idle act runs. */
+  idleState?: {
+    kind: 'doze' | 'yawn' | 'stretch' | 'groom' | 'knead';
+    actU: number;
+    side: number;
+    dozeNod: number;
+    yawnAmount: number;
+    stretchAmount: number;
+    groomAmount: number;
+    groomLickAmount: number;
+    kneadAmount: number;
+    kneadPhase: number;
+  } | null;
 }
 
 interface HandState {
@@ -627,9 +641,13 @@ export class SuxiRenderer {
     // Suxi: whale tail removed.
 
     let exprKey: 'idle' | 'blink' | 'shy' | 'happy' = 'idle';
+    const idle = layout.idleState;
+    const dozeT = idle && idle.kind === 'doze' ? idle.dozeNod : 0;
+    const yawnT = idle && idle.kind === 'yawn' ? idle.yawnAmount : 0;
     if (layout.privacyMode) exprKey = 'blink';
     else if (isHappy || this.moodTier === 2) exprKey = 'happy';
     else if (this.moodTier === 1) exprKey = 'shy';
+    else if (yawnT > 0.30 || dozeT > 0.55) exprKey = 'blink'; // yawn/doze: sleepy closed eyes
     else if (isBlinking) exprKey = 'blink';
 
     const sprites = this.ensureSprites();
@@ -640,7 +658,9 @@ export class SuxiRenderer {
       ctx.rect(0, 0, layout.logicalW, layout.kbCenterY - layout.kbHeight * 0.16);
       ctx.clip();
       ctx.translate(g.charCenterX, g.pivotY);
-      ctx.rotate(this.bodyTilt);
+      // Idle vignettes: doze = sleepy nod (dip + side tilt), yawn = head tips back a touch
+      ctx.rotate(this.bodyTilt + dozeT * 0.085 * (idle?.side ?? 1) - yawnT * 0.05);
+      ctx.translate(0, dozeT * 6.5 - yawnT * 4.5);
       ctx.scale(1 + this.bodyBob * 0.022, 1 - this.bodyBob * 0.018);
       ctx.drawImage(img, -g.drawW * 0.5, -g.drawH + g.pivotOff, g.drawW, g.drawH);
 
@@ -770,25 +790,83 @@ export class SuxiRenderer {
       rTargetX = shR.x + 14;
       rTargetY = shR.y + 4 - cheer;
     } else {
-      if (mouseMode) {
-        const pressOff = layout.mouseLeft || layout.mouseRight ? 2.5 : 0;
-        lTargetX = layout.mouseBtnX;
-        lTargetY = layout.mouseBtnY + pressOff;
-      } else if (leftTyping) {
-        lTargetX = this.leftHand.tx;
-        lTargetY = this.leftHand.ty;
+      const idle = layout.idleState;
+      const idleBusy =
+        now - this.lastKeyAt < 550 ||
+        this.leftHand.heldVks.size > 0 ||
+        this.rightHand.heldVks.size > 0 ||
+        this.tail.heldVks.size > 0;
+      const idleActive = idle && !mouseMode && !idleBusy;
+      if (idleActive && idle.kind === 'groom' && idle.groomAmount > 0.08) {
+        // Groom: paw rises to the mouth & licks, then wipes down across the cheek (engine choreography)
+        const gSide = idle.side;
+        const mouthPt = g.spritePointToWorld(0.495 + gSide * 0.045, 0.625);
+        const headPt = g.spritePointToWorld(0.49, 0.52);
+        let tx: number;
+        let ty: number;
+        if (idle.actU < 0.44) {
+          const lickBeat = idle.actU > 0.12 ? Math.sin((((idle.actU - 0.12) / 0.32) * 2 % 1) * Math.PI) : 0;
+          tx = mouthPt.x + gSide * 12;
+          ty = mouthPt.y - lickBeat * 5.5;
+        } else {
+          const wp = Math.min(1.999, ((idle.actU - 0.44) / 0.40) * 2);
+          const frac = wp % 1;
+          if (frac < 0.35) {
+            const u = frac / 0.35;
+            tx = mouthPt.x + gSide * 26 * u;
+            ty = mouthPt.y - 44 * u;
+          } else {
+            const u = (frac - 0.35) / 0.65;
+            tx = headPt.x + gSide * (34 - u * 12);
+            ty = headPt.y - 26 + u * 38;
+          }
+        }
+        if (gSide < 0) {
+          lTargetX = tx; lTargetY = ty;
+          rTargetX = armRootR.x; rTargetY = armRootR.y;
+        } else {
+          rTargetX = tx; rTargetY = ty;
+          lTargetX = armRootL.x; lTargetY = armRootL.y;
+        }
+      } else if (idleActive && idle.kind === 'stretch' && idle.stretchAmount > 0.10) {
+        // Stretch: both arms reach forward onto the desk toward the keyboard
+        const reach = idle.stretchAmount;
+        const kbTopY = layout.kbCenterY - layout.kbHeight * 0.28;
+        lTargetX = g.charCenterX - (24 + reach * 34);
+        rTargetX = g.charCenterX + (24 + reach * 34);
+        lTargetY = rTargetY = g.charBaseY + reach * (kbTopY - g.charBaseY + 12);
+      } else if (idleActive && idle.kind === 'knead' && idle.kneadAmount > 0.10) {
+        // Knead: both paws alternate pressing the keyboard rim (biscuit making!)
+        const rimY = layout.kbCenterY - layout.kbHeight * 0.36;
+        const sL = Math.sin(idle.kneadPhase);
+        const sR = -sL;
+        lTargetX = g.charCenterX - 26;
+        lTargetY = rimY - Math.max(0, sL) * 13 + Math.max(0, -sL) * 3.5;
+        rTargetX = g.charCenterX + 26;
+        rTargetY = rimY - Math.max(0, sR) * 13 + Math.max(0, -sR) * 3.5;
+        if (Math.max(0, -sL) > 0.72) this.leftHand.squash = Math.max(this.leftHand.squash, Math.max(0, -sL) * 0.55);
+        if (Math.max(0, -sR) > 0.72) this.rightHand.squash = Math.max(this.rightHand.squash, Math.max(0, -sR) * 0.55);
       } else {
-        // Suxi: idle hands retract & hide — parked behind the body at the arm roots
-        lTargetX = armRootL.x;
-        lTargetY = armRootL.y;
-      }
-      if (rightTyping) {
-        rTargetX = this.rightHand.tx;
-        rTargetY = this.rightHand.ty;
-      } else {
-        // Suxi: idle hands retract & hide — parked behind the body at the arm roots
-        rTargetX = armRootR.x;
-        rTargetY = armRootR.y;
+        if (mouseMode) {
+          const pressOff = layout.mouseLeft || layout.mouseRight ? 2.5 : 0;
+          lTargetX = layout.mouseBtnX;
+          lTargetY = layout.mouseBtnY + pressOff;
+        } else if (leftTyping) {
+          lTargetX = this.leftHand.tx;
+          lTargetY = this.leftHand.ty;
+        } else {
+          // Suxi: idle hands retract & hide — parked behind the body at the arm roots
+          lTargetX = armRootL.x;
+          lTargetY = armRootL.y;
+        }
+        if (rightTyping) {
+          rTargetX = this.rightHand.tx;
+          rTargetY = this.rightHand.ty;
+        } else {
+          // Suxi: idle hands retract & hide — parked behind the body at the arm roots
+          rTargetX = armRootR.x;
+          rTargetY = armRootR.y;
+        }
       }
     }
 
@@ -901,6 +979,75 @@ export class SuxiRenderer {
     ctx.beginPath();
     ctx.arc(-2.5, -2.7, 2.3, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
+  }
+
+  /**
+   * Suxi: chibi hands gripping the vertical screen border while Edge-Peeking.
+   * Skin-tone arm stub emerging from behind the border + round paw, matching
+   * the typing-hand look (drawSuxiArm / drawSuxiHand).
+   */
+  public renderEdgePeekHands(
+    ctx: CanvasRenderingContext2D,
+    edgeX: number,
+    midY: number,
+    isLeft: boolean,
+    peekP: number,
+    now: number,
+  ): void {
+    const alpha = Math.max(0, Math.min(1, (peekP - 0.22) / 0.38));
+    if (alpha <= 0.001) return;
+    const dir = isLeft ? 1 : -1;
+    const slide = (1 - Math.min(1, peekP)) * 24;
+
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    for (const side of [-1, 1] as const) {
+      const bob = Math.sin(now * 0.0032 + (side < 0 ? 0 : Math.PI)) * 1.4;
+      const py = midY + side * 72 + bob;
+      const anchorX = edgeX - dir * slide;
+
+      ctx.save();
+      ctx.translate(anchorX, py);
+      ctx.scale(dir, 1);
+
+      // Soft shadow behind the gripping hand
+      ctx.fillStyle = 'rgba(24, 26, 46, 0.14)';
+      ctx.beginPath();
+      ctx.ellipse(10.8, 2.2, 9.4, 7.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Skin-tone arm stub emerging from behind the screen border
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-14, 0);
+      ctx.quadraticCurveTo(-4, -1.2, 7.2, -0.8);
+      ctx.strokeStyle = '#d9a276';
+      ctx.lineWidth = 9.4;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-14, 0);
+      ctx.quadraticCurveTo(-4, -1.2, 7.2, -0.8);
+      ctx.strokeStyle = '#fff0e2';
+      ctx.lineWidth = 7.4;
+      ctx.stroke();
+
+      // Round chibi paw gripping the edge
+      ctx.fillStyle = '#fff0e2';
+      ctx.strokeStyle = '#e3c3a8';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.ellipse(8.6, 0, 7.6, 8.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Knuckle highlight
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+      ctx.beginPath();
+      ctx.arc(7.0, -2.6, 2.0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
     ctx.restore();
   }
 

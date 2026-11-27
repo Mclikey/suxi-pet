@@ -1040,6 +1040,22 @@ export class KuroCatEngine {
       privacyTypingAt: this.privacyTypingAt,
       is108: this.keyboardLayout === '108',
       peekAmount: Math.max(0, Math.min(1, this.peekAmount)),
+      idleState: (() => {
+        const act = this.idleAct;
+        if (!act || !['doze', 'yawn', 'stretch', 'groom', 'knead'].includes(act.kind)) return null;
+        return {
+          kind: act.kind as 'doze' | 'yawn' | 'stretch' | 'groom' | 'knead',
+          actU: Math.max(0, Math.min(1, (performance.now() - act.t0) / act.dur)),
+          side: act.side,
+          dozeNod: this.dozeNod,
+          yawnAmount: this.yawnAmount,
+          stretchAmount: this.stretchAmount,
+          groomAmount: this.groomAmount,
+          groomLickAmount: this.groomLickAmount,
+          kneadAmount: this.kneadAmount,
+          kneadPhase: this.kneadPhase,
+        };
+      })(),
     };
   }
 
@@ -2626,6 +2642,8 @@ export class KuroCatEngine {
       this.heldKeys.size > 0 ||
       this.catTail.heldVks.size > 0;
     const isCatMode = !this.isSpriteBreed;
+    // Suxi port: idle vignettes (doze/yawn/stretch/groom/knead) also run for Suxi — visuals live in SuxiRenderer.
+    const idleActAllowed = isCatMode || this.catBreed === 'suxi';
 
     // 1) Alive cat emotional states: sleep (loaf + Zzz), curious (laser-pointer eyes), annoy -> cross (airplane ears + tail desk-thump),
     //    rich idle vignettes (doze, yawn, stretch, groom, knead), scruffed drag, boop, chin scratch & tail poke!
@@ -2804,7 +2822,7 @@ export class KuroCatEngine {
       this.idleAct = null;
     }
     if (
-      isCatMode &&
+      idleActAllowed &&
       !this.idleAct &&
       !this.asleep &&
       !this.privacyMode &&
@@ -2841,8 +2859,12 @@ export class KuroCatEngine {
       } else if (now >= this.nextIdleActAt && idleMs > 2600) {
         const pool: IdleFidget['kind'][] =
           idleMs > 7500
-            ? ['tilt', 'ear', 'slowBlink', 'look', 'tail', 'groom', 'groom', 'stretch', 'knead', 'yawn']
-            : ['tilt', 'tilt', 'ear', 'slowBlink', 'look', 'tail'];
+            ? (this.catBreed === 'suxi'
+              ? ['groom', 'groom', 'stretch', 'knead', 'yawn', 'doze']
+              : ['tilt', 'ear', 'slowBlink', 'look', 'tail', 'groom', 'groom', 'stretch', 'knead', 'yawn'])
+            : (this.catBreed === 'suxi'
+              ? ['knead', 'stretch', 'groom']
+              : ['tilt', 'tilt', 'ear', 'slowBlink', 'look', 'tail']);
         const kind = pool[Math.floor(Math.random() * pool.length)];
         const durMap: Record<IdleFidget['kind'], number> = {
           tilt: 1900,

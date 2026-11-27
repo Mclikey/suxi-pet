@@ -23,6 +23,19 @@ export interface DaFeiYuLayout {
   privacyTypingAt: number;
   is108: boolean;
   peekAmount?: number;
+  /** Engine-driven idle vignette state (v5.1.3 port): present only while an idle act runs. */
+  idleState?: {
+    kind: 'doze' | 'yawn' | 'stretch' | 'groom' | 'knead';
+    actU: number;
+    side: number;
+    dozeNod: number;
+    yawnAmount: number;
+    stretchAmount: number;
+    groomAmount: number;
+    groomLickAmount: number;
+    kneadAmount: number;
+    kneadPhase: number;
+  } | null;
 }
 
 interface HandState {

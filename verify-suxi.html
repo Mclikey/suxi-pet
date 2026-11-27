@@ -39,6 +39,8 @@ let now = performance.now();
 const typing = location.search.includes('typing');
 const edgeSim = location.search.includes('edge');
 const mouseSim = location.search.includes('mouse');
+// ?act=knead|groom|stretch|doze|yawn：强制注入待机动画状态（验证移植效果）
+const actName = (location.search.match(/act=(\w+)/) || [])[1];
 let lastType = 0;
 function frame() {
   now = performance.now(); // 与 onKeyDown 内部时钟保持一致（headless 虚拟时间下必须对齐）
@@ -47,6 +49,23 @@ function frame() {
   if (kb108) { ctx.fillStyle='#333'; ctx.fillRect(91,308,398,96); }
   else { ctx.fillStyle='#333'; ctx.fillRect(81,316,266,74); }
   if (mouseSim) { layout.mouseActiveAt = now - 100; layout.cursor = {x: layout.mouseBtnX, y: layout.mouseBtnY}; }
+  if (actName && !typing && !mouseSim) {
+    const actU = 0.45;
+    layout.idleState = {
+      kind: actName,
+      actU,
+      side: 1,
+      dozeNod: actName === 'doze' ? Math.sin(actU * Math.PI) : 0,
+      yawnAmount: actName === 'yawn' ? 0.85 : 0,
+      stretchAmount: actName === 'stretch' ? 0.85 : 0,
+      groomAmount: actName === 'groom' ? 0.85 : 0,
+      groomLickAmount: 0,
+      kneadAmount: actName === 'knead' ? 0.85 : 0,
+      kneadPhase: now * 0.0044,
+    };
+  } else if (layout.idleState) {
+    layout.idleState = null;
+  }
   if ((typing || edgeSim) && now - lastType > 200) {
     lastType = now;
     const left = Math.floor(now / 200) % 2 === 0;
