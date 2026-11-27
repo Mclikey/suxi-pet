@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head><meta charset="UTF-8"><title>Hand Debug2</title></head>
+<body style="margin:0">
+<canvas id="c" width="480" height="360"></canvas>
+<div id="out" style="font:12px monospace; white-space:pre"></div>
+<script type="module">
+import { SuxiRenderer } from '/src/suxiRenderer.ts';
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const r = new SuxiRenderer();
+const layout = {
+  logicalW: 420, logicalH: 440,
+  kbCenterX: 214, kbCenterY: 353, kbWidth: 266, kbHeight: 74, kbTiltRad: 0.0593,
+  mouseBtnX: 72, mouseBtnY: 322, cursor: null,
+  mouseNX: 0, mouseLeft: false, mouseRight: false,
+  mouseActiveAt: -10000, mouseClickAt: -10000,
+  petEnergy: 0, privacyMode: false, privacyTypingAt: -10000, is108: false,
+};
+const mode = (location.search.match(/mode=(\w+)/) || [])[1] || 'idle';
+// idle-animation poses: representative actU + envelope so hands converge to the peak
+const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const IDLE_POSE = { groom: 0.30, stretch: 0.45, knead: 0.40, doze: 0.50, yawn: 0.50 };
+function applyIdle(t) {
+  const actU = IDLE_POSE[mode];
+  if (actU === undefined) { layout.idleState = undefined; return; }
+  const env = smooth(0, 0.25, actU) * (1 - smooth(0.7, 1, actU));
+  layout.idleState = {
+    kind: mode, actU, side: 1,
+    dozeNod: mode === 'doze' ? 0.85 : 0,
+    yawnAmount: mode === 'yawn' ? env : 0,
+    stretchAmount: mode === 'stretch' ? env : 0,
+    groomAmount: mode === 'groom' ? env : 0,
+    kneadAmount: mode === 'knead' ? env : 0,
+    kneadPhase: Math.sin(t * 0.006),
+  };
+}
+// mock Layer-2 props (keyboard deck + mouse cable) drawn BETWEEN renderBody and
+// renderForeground — reproduces the real catEngine layer order for occlusion checks
+const drawMockProps = (c) => {
+  const kbTop = layout.kbCenterY - layout.kbHeight * 0.5;
+  c.save();
+  c.fillStyle = '#1d2434';
+  c.strokeStyle = '#0e1220';
+  c.lineWidth = 2;
+  c.beginPath();
+  c.roundRect(layout.kbCenterX - layout.kbWidth * 0.5, kbTop, layout.kbWidth, layout.kbHeight, 6);
+  c.fill();
+  c.stroke();
+  // mouse body + cable running up-right from the mouse toward the keyboard
+  c.strokeStyle = '#20242c';
+  c.lineWidth = 2.6;
+  c.beginPath();
+  c.moveTo(layout.mouseBtnX + 26, layout.mouseBtnY + 10);
+  c.quadraticCurveTo(layout.mouseBtnX + 80, layout.mouseBtnY - 26, layout.kbCenterX - layout.kbWidth * 0.5 + 6, kbTop + 10);
+  c.stroke();
+  c.fillStyle = '#2c3444';
+  c.beginPath();
+  c.roundRect(layout.mouseBtnX - 14, layout.mouseBtnY - 10, 40, 26, 8);
+  c.fill();
+  c.stroke();
+  c.restore();
+};
+// synchronous warmup: 600 frames on an offscreen canvas
+const off = document.createElement('canvas');
+off.width = 480; off.height = 360;
+const octx = off.getContext('2d');
+const endT = performance.now();
+let lastVk = 0;
+for (let i = 0; i < 600; i++) {
+  const t = endT - (600 - i) * 16;
+  octx.clearRect(0, 0, 480, 360);
+  if (mode === 'mouse') { layout.mouseActiveAt = t - 100; layout.cursor = { x: layout.mouseBtnX, y: layout.mouseBtnY }; layout.mouseNX = 0.15; }
+  applyIdle(t);
+  if (mode === 'typing' && i % 13 === 0) {
+    const left = Math.floor(i / 13) % 2 === 0;
+    const pt = left ? { x: 170, y: 348 } : { x: 250, y: 348 };
+    lastVk = left ? 65 : 76;
+    r.onKeyDown(lastVk, pt, layout, false, false);
+  }
+  if (mode === 'typing' && i % 13 === 7 && lastVk) { r.onKeyUp(lastVk); lastVk = 0; }
+  r.update(0.016, t, layout);
+  r.renderBody(octx, t, layout);
+  drawMockProps(octx);
+  r.renderForeground(octx, 0.016, t, layout);
+}
+if (lastVk) r.onKeyUp(lastVk);
+// wait for the lazy-loaded sprite sheets, then draw the converged state once
+await new Promise((res) => {
+  const tick = () => {
+    const s = r.sprites;
+    const st = s ? ('idle:' + s.idle.complete + ' blink:' + s.blink.complete) : 'no-sprites-yet';
+    document.getElementById('out').textContent = 'waiting… ' + st;
+    (s && s.idle && s.idle.complete && s.blink.complete && s.shy.complete && s.happy.complete) ? res() : setTimeout(tick, 10);
+  };
+  tick();
+});
+{
+  const t = endT;
+  ctx.clearRect(0, 0, 480, 360);
+  if (mode === 'mouse') { layout.mouseActiveAt = t - 100; layout.cursor = { x: layout.mouseBtnX, y: layout.mouseBtnY }; layout.mouseNX = 0.15; }
+  applyIdle(t);
+  r.update(0.016, t, layout);
+  r.renderBody(ctx, t, layout);
+  drawMockProps(ctx);
+  r.renderForeground(ctx, 0.016, t, layout);
+}
+document.getElementById('out').textContent =
+  'mode=' + mode +
+  '\nleftHand=' + r.leftHand.x.toFixed(1) + ',' + r.leftHand.y.toFixed(1) +
+  '  target=' + r.leftHand.tx.toFixed(1) + ',' + r.leftHand.ty.toFixed(1) +
+  '  held=' + r.leftHand.heldVks.size +
+  '\nrightHand=' + r.rightHand.x.toFixed(1) + ',' + r.rightHand.y.toFixed(1) +
+  '  target=' + r.rightHand.tx.toFixed(1) + ',' + r.rightHand.ty.toFixed(1) +
+  '  held=' + r.rightHand.heldVks.size;
+</script>
+</body>
+</html>

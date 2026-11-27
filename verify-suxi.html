@@ -41,6 +41,37 @@ const edgeSim = location.search.includes('edge');
 const mouseSim = location.search.includes('mouse');
 // ?act=knead|groom|stretch|doze|yawn：强制注入待机动画状态（验证移植效果）
 const actName = (location.search.match(/act=(\w+)/) || [])[1];
+// ?warm=N：启动前先在离屏 canvas 上模拟 N 帧，让手/视线/物理收敛到稳定态
+// （headless 虚拟时间下 rAF 只跑 2 帧，不预热截到的全是初始瞬态）
+const warm = parseInt((location.search.match(/warm=(\d+)/) || [])[1] || '0', 10);
+if (warm > 0) {
+  const off = document.createElement('canvas');
+  off.width = canvas.width;
+  off.height = canvas.height;
+  const octx = off.getContext('2d');
+  const endT = performance.now();
+  let lastVk = 0;
+  let lastWasLeft = false;
+  for (let i = 0; i < warm; i++) {
+    const t = endT - (warm - i) * 16;
+    octx.clearRect(0, 0, off.width, off.height);
+    if (mouseSim) { layout.mouseActiveAt = t - 100; layout.cursor = { x: layout.mouseBtnX, y: layout.mouseBtnY }; }
+    if ((typing || edgeSim) && i % 13 === 0) {
+      lastWasLeft = Math.floor(i / 13) % 2 === 0;
+      const pt = edgeSim ? (lastWasLeft ? { x: 100, y: 373 } : { x: 330, y: 342 }) : (lastWasLeft ? { x: 170, y: 348 } : { x: 250, y: 348 });
+      lastVk = lastWasLeft ? 65 : 76;
+      r.onKeyDown(lastVk, pt, layout, false, false);
+    }
+    if ((typing || edgeSim) && i % 13 === 7 && lastVk) {
+      r.onKeyUp(lastVk);
+      lastVk = 0;
+    }
+    r.update(0.016, t, layout);
+    r.renderBody(octx, t, layout);
+    r.renderForeground(octx, 0.016, t, layout);
+  }
+  if (lastVk) r.onKeyUp(lastVk);
+}
 let lastType = 0;
 function frame() {
   now = performance.now(); // 与 onKeyDown 内部时钟保持一致（headless 虚拟时间下必须对齐）

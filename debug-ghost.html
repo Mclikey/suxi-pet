@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head><meta charset="UTF-8"><title>Ghost Debug</title>
+<style>
+  body { margin:0; background:#2b2b2b; display:flex; gap:8px; padding:8px; }
+  canvas { background:#e8e8e8; border:1px solid #666; }
+  #labels { position:fixed; top:0; left:0; color:#ff0; font:20px monospace; white-space:pre; text-shadow:0 0 3px #000; z-index:9; }
+</style>
+</head>
+<body>
+<canvas id="cBody" width="480" height="360"></canvas>
+<canvas id="cFg" width="480" height="360"></canvas>
+<canvas id="cAll" width="480" height="360"></canvas>
+<div id="labels"></div>
+<script type="module">
+import { SuxiRenderer } from '/src/suxiRenderer.ts';
+const ctxBody = document.getElementById('cBody').getContext('2d');
+const ctxFg = document.getElementById('cFg').getContext('2d');
+const ctxAll = document.getElementById('cAll').getContext('2d');
+ctxBody.__tag = 'body'; ctxFg.__tag = 'fg'; ctxAll.__tag = 'all';
+// instrument: log every drawSuxiArm call (which canvas + coords + alpha)
+window.__calls = [];
+const __origKey = SuxiRenderer.prototype.onKeyDown;
+SuxiRenderer.prototype.onKeyDown = function (...a) {
+  window.__presses = (window.__presses || 0) + 1;
+  return __origKey.apply(this, a);
+};
+const __origArm = SuxiRenderer.prototype.drawSuxiArm;
+SuxiRenderer.prototype.drawSuxiArm = function (ctx, ax, ay, hx, hy, alpha, side) {
+  window.__calls.push((ctx.__tag || '?') + ': r=' + ax.toFixed(1) + ',' + ay.toFixed(1) +
+    ' h=' + hx.toFixed(1) + ',' + hy.toFixed(1) + ' a=' + alpha.toFixed(2) + ' s=' + side);
+  return __origArm.call(this, ctx, ax, ay, hx, hy, alpha, side);
+};
+const r = new SuxiRenderer();
+const layout = {
+  logicalW: 420, logicalH: 440,
+  kbCenterX: 214, kbCenterY: 353, kbWidth: 266, kbHeight: 74, kbTiltRad: 0.0593,
+  mouseBtnX: 72, mouseBtnY: 322, cursor: null,
+  mouseNX: 0, mouseLeft: false, mouseRight: false,
+  mouseActiveAt: -10000, mouseClickAt: -10000,
+  petEnergy: 0, privacyMode: false, privacyTypingAt: -10000, is108: false,
+};
+const mode = (location.search.match(/mode=(\w+)/) || [])[1] || 'groom';
+const keysSim = location.search.includes('keys');
+// forced actU: converge to one exact phase; 'live' = full-cycle animation
+const uParam = location.search.match(/u=([\d.]+)/);
+const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+function setIdle(t) {
+  const actU = uParam ? parseFloat(uParam[1]) : ((t / 3800) % 1);
+  const env = smooth(0, 0.14, actU) * (1 - smooth(0.86, 1, actU));
+  layout.idleState = {
+    kind: mode, actU, side: 1,
+    dozeNod: mode === 'doze' ? 0.85 : 0, yawnAmount: mode === 'yawn' ? env : 0, stretchAmount: 0,
+    groomAmount: mode === 'groom' ? env : 0,
+    kneadAmount: mode === 'knead' ? env : 0,
+    kneadPhase: Math.sin(t * 0.0044),
+  };
+}
+function drawProps(c) {
+  const kbTop = layout.kbCenterY - layout.kbHeight * 0.5;
+  c.fillStyle = '#1d2434';
+  c.beginPath(); c.roundRect(81, kbTop, 266, 74, 6); c.fill();
+  c.strokeStyle = '#20242c'; c.lineWidth = 2.6;
+  c.beginPath(); c.moveTo(98, 332); c.quadraticCurveTo(152, 296, 87, kbTop + 10); c.stroke();
+}
+function renderFrame(t, dt, i) {
+  setIdle(t);
+  // &keys=1: keep a key held so a hand swings out while the body nods (doze) —
+  // the exact scenario where anchor/body transform mismatch shows as ghosting
+  if (keysSim && i % 13 === 0) r.onKeyDown(65, { x: 170, y: 348 }, layout, false, false);
+  if (keysSim && i % 13 === 7) r.onKeyUp(65);
+  r.update(dt, t, layout);
+  window.__calls.length = 0;
+  ctxBody.clearRect(0, 0, 480, 360);
+  r.renderBody(ctxBody, t, layout);
+  ctxFg.clearRect(0, 0, 480, 360);
+  r.renderForeground(ctxFg, dt, t, layout);
+  ctxAll.clearRect(0, 0, 480, 360);
+  r.renderBody(ctxAll, t, layout);
+  drawProps(ctxAll);
+  r.renderForeground(ctxAll, dt, t, layout);
+  document.getElementById('labels').textContent =
+    'mode=' + mode + ' u=' + (layout.idleState ? layout.idleState.actU.toFixed(3) : '-') +
+    '\nkeysSim=' + keysSim + ' i=' + i + ' lastAtAgo=' + Math.round(performance.now() - r.leftHand.lastAt) + ' held=' + r.leftHand.heldVks.size + ' presses=' + (window.__presses || 0) +
+    '\nL=' + r.leftHand.x.toFixed(1) + ',' + r.leftHand.y.toFixed(1) +
+    ' R=' + r.rightHand.x.toFixed(1) + ',' + r.rightHand.y.toFixed(1) +
+    '\n' + window.__calls.join('\n');
+}
+// warmup for sprite load + state convergence (600 frames)
+{
+  const off = document.createElement('canvas'); off.width = 480; off.height = 360;
+  const octx = off.getContext('2d');
+  const endT = performance.now();
+  for (let i = 0; i < 600; i++) {
+    const t = endT - (600 - i) * 16;
+    octx.clearRect(0, 0, 480, 360);
+    setIdle(uParam ? endT : t);
+    if (keysSim && i % 13 === 0) r.onKeyDown(65, { x: 170, y: 348 }, layout, false, false);
+    if (keysSim && i % 13 === 7) r.onKeyUp(65);
+    r.update(0.016, t, layout);
+    r.renderBody(octx, t, layout);
+    r.renderForeground(octx, 0.016, t, layout);
+  }
+}
+// wait for sprites, then run live loop (headless: virtual time budget drives rAF)
+await new Promise((res) => {
+  const tick = () => {
+    const s = r.sprites;
+    (s && s.idle && s.idle.complete && s.blink.complete && s.shy.complete && s.happy.complete) ? res() : setTimeout(tick, 10);
+  };
+  tick();
+});
+const t0 = performance.now();
+function loop() {
+  const t = performance.now();
+  try { renderFrame(uParam ? t0 + 600 * 16 : t, 0.016, Math.floor(t / 16)); }
+  catch (e) { document.getElementById('labels').textContent = 'LOOP-ERROR: ' + (e && e.message) + '\n' + (e && e.stack || '').slice(0, 400); }
+  requestAnimationFrame(loop);
+}
+loop();
+window.__ready = true;
+</script>
+</body>
+</html>

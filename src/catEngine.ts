@@ -1410,7 +1410,14 @@ export class KuroCatEngine {
       Math.abs(this.deskHopY) > 0.15 ||
       Math.abs(this.headsetSpring.v) > 0.02 ||
       Math.abs(this.headsetSpring.x - (this.headphonesOn ? 1 : 0)) > 0.01 ||
-      this.fxParticles.some((fx) => fx.kind !== 'z');
+      this.fxParticles.some((fx) => fx.kind !== 'z') ||
+      // Idle-act animations swing arms fast (groom lick sweep ~15px/frame even at
+      // ambient 23fps) — strobing there reads as "arm ghosting/double image" to the
+      // eye even though every frame is geometrically clean. Promote to full action
+      // pacing while an act is visibly running (transient, so CPU cost is bounded).
+      this.groomAmount > 0.02 ||
+      this.stretchAmount > 0.02 ||
+      this.kneadAmount > 0.02;
     if (hasActiveAction) return 'action';
 
     if (this.sleepAmount > 0.95) return 'sleep';
@@ -2206,14 +2213,14 @@ export class KuroCatEngine {
     const primary = this.customSkin
       ? this.customSkin.accentColor
       : this.isSpriteBreed
-        ? this.catBreed === 'suxi' ? '#e0b73c' : '#5cc8ff'
+        ? '#5cc8ff'
         : this.catBreed === 'ragdoll'
           ? '#7ac7ff'
           : '#d4f044';
     const scroll = this.customSkin
       ? this.customSkin.accentSideColor
       : this.isSpriteBreed
-        ? this.catBreed === 'suxi' ? '#b8930f' : '#2563eb'
+        ? '#2563eb'
         : this.catBreed === 'ragdoll'
           ? '#4690d8'
           : '#92ba12';
@@ -5215,14 +5222,14 @@ export class KuroCatEngine {
         topColor = this.customSkin
           ? this.customSkin.accentColor
           : this.isSpriteBreed
-            ? this.catBreed === 'suxi' ? '#e0b73c' : '#5cc8ff'
+            ? '#5cc8ff'
             : this.catBreed === 'ragdoll'
               ? '#7ac7ff'
               : '#d2f244';
         sideColor = this.customSkin
           ? this.customSkin.accentSideColor
           : this.isSpriteBreed
-            ? this.catBreed === 'suxi' ? '#b8930f' : '#2563eb'
+            ? '#2563eb'
             : this.catBreed === 'ragdoll'
               ? '#4690d8'
               : '#8cb014';
@@ -5300,9 +5307,9 @@ export class KuroCatEngine {
     };
 
     const pickerAccentTop =
-      this.isSpriteBreed ? this.catBreed === 'suxi' ? '#e0b73c' : '#5cc8ff' : this.catBreed === 'ragdoll' ? '#7ac7ff' : '#c8f538';
+      this.isSpriteBreed ? '#5cc8ff' : this.catBreed === 'ragdoll' ? '#7ac7ff' : '#c8f538';
     const pickerAccentSide =
-      this.isSpriteBreed ? this.catBreed === 'suxi' ? '#b8930f' : '#2563eb' : this.catBreed === 'ragdoll' ? '#4690d8' : '#8cb014';
+      this.isSpriteBreed ? '#2563eb' : this.catBreed === 'ragdoll' ? '#4690d8' : '#8cb014';
 
     if (!this.tailPickerActive) {
       // Cache the entire static keyboard (chassis + Gaussian shadowBlur + all 65/108 unpressed keycaps & legends)
